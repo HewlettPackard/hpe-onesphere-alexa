@@ -283,7 +283,6 @@ def lambda_handler(event, context):
         print("create_ns_session: token = ", TOKEN)
         print("create_ns_session: api_base = ", API_BASE)
 
-
     # Select the appropriate event handler
     if event['session']['new']:
         on_session_started({'requestId': event['request']['requestId']},
@@ -304,9 +303,10 @@ if __name__ == "__main__":
     cred = json.load(open('cred.json'))
 
     # unit test harness
-    os.environ['api_base'] = "https://onespheretme1.stackbeta.hpe.com/rest"
+    os.environ['api_base'] = cred["api_base"]
     os.environ['skill_id'] = "foobar"
     os.environ['user'] = cred["userName"]
     os.environ['password'] = cred["password"]
     context = ""
+    print(os.environ)
     print(lambda_handler(event, context))
