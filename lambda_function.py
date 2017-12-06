@@ -168,7 +168,7 @@ def return_total_mon_spend(intent, session):
     reprompt_text = ""
 
     # Get service status
-    payload = {'category': 'workspaces', 'name': 'cost.total',
+    payload = {'category': 'providers', 'name': 'cost.total',
                'periodStart': '2018-01-01T00:00:00Z',
                'period': 'month', 'periodCount': '-1', 'view': 'full'}
     r = safe_requests(requests.get, api_base + "/metrics", params=payload,
