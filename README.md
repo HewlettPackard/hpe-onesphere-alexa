@@ -49,6 +49,10 @@ The lambda function expects to have the following environment variables set:
 
 The credentials and the URL are essentially hard-coded in lambda environment variables. The code relies on the AWS KMS encryption for data-at-rest security. Certainly this is a hack and a better method should be implemented. When OneSphere supports identity providers then the code should implement linked identity. 
 
+Here is a youtube video demonstrating the initial version of the code:
+
+- <b> https://youtu.be/8Zu_I1sJhjk </b>
+
 ## Prerequisites
 
 Ensure that the zip file that packages this skill for lambda includes the dependent Python libraries (i.e. requests). This code was tested against Python 2.7.
