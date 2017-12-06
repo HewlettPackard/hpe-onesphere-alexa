@@ -4,11 +4,11 @@ This is a voice activated console for OneSphere
 
 from __future__ import print_function
 import requests
+import logging
 import json
 import os
 
-VERSION = "3.0"
-DEBUG = True
+__version__ = "1.0"
 
 # Global vars taken from environment variables
 API_BASE = ""
@@ -27,13 +27,13 @@ def safe_requests(f, *args, **kwargs):
         r = f(*args, **kwargs)
 
         if r.status_code != 200:
-            print("Error: Unexpected response {}".format(r))
+            logging.error("Error: Unexpected response {}".format(r))
             return {}
         else:
             return r.json()
 
     except requests.exceptions.RequestException as e:
-        print("Error: {}".format(e))
+        logging.error("Error: {}".format(e))
         return {}
 
 
@@ -79,7 +79,7 @@ def build_speechlet_response(title, output, reprompt_text, should_end_session):
 
 def build_response(session_attributes, speechlet_response):
     return {
-        'version': VERSION,
+        'version': __version__,
         'sessionAttributes': session_attributes,
         'response': speechlet_response
     }
@@ -186,7 +186,7 @@ def return_total_mon_spend(intent, session):
             member = r["members"][i]
             value = member["values"][0]
             val = value["value"]
-            print("value = " + str(val))
+            logging.debug("value = %d", val)
             total_spend = total_spend + val
 
         # Create response
@@ -204,7 +204,7 @@ def return_total_mon_spend(intent, session):
 def on_session_started(session_started_request, session):
     """ Called when the session starts """
 
-    print("on_session_started requestId=" + session_started_request['requestId']
+    logging.info("on_session_started requestId=" + session_started_request['requestId']
           + ", sessionId=" + session['sessionId'])
 
 
@@ -213,7 +213,7 @@ def on_launch(launch_request, session):
     want
     """
 
-    print("on_launch requestId=" + launch_request['requestId'] +
+    logging.info("on_launch requestId=" + launch_request['requestId'] +
           ", sessionId=" + session['sessionId'])
     # Dispatch to your skill's launch
     return get_welcome_response()
@@ -222,7 +222,7 @@ def on_launch(launch_request, session):
 def on_intent(intent_request, session):
     """ Called when the user specifies an intent for this skill """
 
-    print("on_intent requestId=" + intent_request['requestId'] +
+    logging.info("on_intent requestId=" + intent_request['requestId'] +
           ", sessionId=" + session['sessionId'])
 
     intent = intent_request['intent']
@@ -248,7 +248,7 @@ def on_session_ended(session_ended_request, session):
 
     Is not called when the skill returns should_end_session=true
     """
-    print("on_session_ended requestId=" + session_ended_request['requestId'] +
+    logging.info("on_session_ended requestId=" + session_ended_request['requestId'] +
           ", sessionId=" + session['sessionId'])
     # add cleanup logic here
 
@@ -260,7 +260,7 @@ def lambda_handler(event, context):
     etc.) The JSON body of the request is provided in the event parameter.
     """
 
-    print("event.session.application.applicationId=" +
+    logging.info("event.session.application.applicationId=" +
           event['session']['application']['applicationId'])
 
     # Validate the application ID
@@ -279,9 +279,8 @@ def lambda_handler(event, context):
     # Get session ID
     global TOKEN
     TOKEN = create_ns_session(API_BASE, USER, PASSWORD, event['session'])
-    if DEBUG:
-        print("create_ns_session: token = ", TOKEN)
-        print("create_ns_session: api_base = ", API_BASE)
+    logging.debug("create_ns_session: token = %s", TOKEN)
+    logging.debug("create_ns_session: api_base = %s", API_BASE)
 
     # Select the appropriate event handler
     if event['session']['new']:
@@ -302,11 +301,14 @@ if __name__ == "__main__":
     event = json.load(open('event.json'))
     cred = json.load(open('cred.json'))
 
+    # set logging level
+    logging.basicConfig(level=logging.INFO)
+
     # unit test harness
     os.environ['api_base'] = cred["api_base"]
     os.environ['skill_id'] = "foobar"
     os.environ['user'] = cred["userName"]
     os.environ['password'] = cred["password"]
     context = ""
-    print(os.environ)
-    print(lambda_handler(event, context))
+    logging.info(os.environ)
+    logging.info(lambda_handler(event, context))
