@@ -1,0 +1,40 @@
+{
+  "session": {
+    "new": "true",
+    "sessionId": "SessionId.82fe8835-b0d1-47d5-b842-8788072ea1e8",
+    "application": {
+      "applicationId": "foobar"
+    },
+    "attributes": {},
+    "user": {
+      "userId": "foouser"
+    }
+  },
+  "request": {
+    "type": "IntentRequest",
+    "requestId": "EdwRequestId.d38ae9d6-9c1b-4134-8bdd-d7496ef5dc3c",
+    "intent": {
+      "name": "AWSNCSManagedUtil",
+      "slots": {}
+    },
+    "locale": "en-US",
+    "timestamp": "2017-12-03T01:25:22Z"
+  },
+  "context": {
+    "AudioPlayer": {
+      "playerActivity": "IDLE"
+    },
+    "System": {
+      "application": {
+        "applicationId": "amzn1.ask.skill.9c2ebd97-2737-4b56-bde6-c11a82c83e7f"
+      },
+      "user": {
+        "userId": "foouser"
+      },
+      "device": {
+        "supportedInterfaces": {}
+      }
+    }
+  },
+  "version": "1.0"
+}
