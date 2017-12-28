@@ -1,20 +1,55 @@
 """
-This is a voice activated console for OneSphere
+In this file we specify default event handlers which are then populated into the handler map using metaprogramming
+Copyright Anjishnu Kumar 2015
+Happy Hacking!
 """
 
-from __future__ import print_function
-import requests
-import logging
 import json
+import logging
 import os
+import urllib
+import requests
+from ask import alexa
+from ncs.osph_metric_io import MetricData
 
 __version__ = "1.0"
 
-# Global vars taken from environment variables
-API_BASE = ""
-USER = ""
-PASSWORD = ""
-TOKEN = ""
+
+def lambda_handler(request_obj, context=None):
+    '''
+    This is the main function to enter to enter into this code.
+    If you are hosting this code on AWS Lambda, this should be the entry point.
+    Otherwise your server can hit this code as long as you remember that the
+    input 'request_obj' is JSON request converted into a nested python object.
+    '''
+
+    # Setup configuration vars from lambda environment (lazy code)
+    api_base = os.environ['api_base']
+    user_name = os.environ['user']
+    password = os.environ['password']
+    skill_id = os.environ['skill_id']
+    event_session = None   # event['session']
+
+    # Get session ID
+    session_token = create_ns_session(api_base, user_name, password, event_session)
+    logging.debug("create_ns_session: token = %s", session_token)
+    logging.debug("create_ns_session: api_base = %s", api_base)
+
+    metadata = {'user_name': user_name,
+                'password': password,
+                'api_base': api_base,
+                'token': session_token,
+                'skill_id': skill_id}
+
+    ''' inject user relevant metadata into the request if you want to, here.    
+    e.g. Something like : 
+    ... metadata = {'user_name' : some_database.query_user_name(request.get_user_id())}
+
+    Then in the handler function you can do something like -
+    ... return alexa.create_response('Hello there {}!'.format(request.metadata['user_name']))
+    '''
+    return alexa.route_request(request_obj, metadata)
+
 
 # --------------- Helpers that build all of the responses ----------------------
 
@@ -55,92 +90,54 @@ def create_ns_session(api_base, user_name, password, session_id):
     else:
         return ""
 
-
-def build_speechlet_response(title, output, reprompt_text, should_end_session):
-    return {
-        'outputSpeech': {
-            'type': 'PlainText',
-            'text': output
-        },
-        'card': {
-            'type': 'Simple',
-            'title': "SessionSpeechlet - " + title,
-            'content': "SessionSpeechlet - " + output
-        },
-        'reprompt': {
-            'outputSpeech': {
-                'type': 'PlainText',
-                'text': reprompt_text
-            }
-        },
-        'shouldEndSession': should_end_session
-    }
+# --------------- Decorated functions for the route handlers ----------------------
 
 
-def build_response(session_attributes, speechlet_response):
-    return {
-        'version': __version__,
-        'sessionAttributes': session_attributes,
-        'response': speechlet_response
-    }
+# default_handler = alexa.default_handler(default_handler)
+@alexa.default_handler()
+def default_handler(request):
+    """ The default handler gets invoked if no handler is set for a request """
+    return alexa.create_response(message="Just ask")
 
 
-# --------------- Functions that control the skill's behavior ------------------
+# syntactic sugar
+# launch_request_handler = alexa.request_handler("LaunchRequest")
+# Welcome message when no intent is given
+@alexa.request_handler("LaunchRequest")
+def launch_request_handler(request):
+    return alexa.create_response(message="Welcome to the OneSphere voice activated cloud management console. " +
+                                         "Please ask me something about your OneSphere service")
 
-def get_welcome_response():
-    """ If we wanted to initialize the session to have some attributes we could
-    add those here
+
+# Message when receiving an end session intent
+@alexa.request_handler("SessionEndedRequest")
+def session_ended_request_handler(request):
+    return alexa.create_response(
+        message="Thank you for trying the OneSphere voice activated cloud management console. " +
+                "Have a nice day! ")
+
+
+# Message when receiving a brohug intent
+@alexa.intent_handler("BroHugDistance")
+def get_brohug_intent_handler(request):
+
+    card = alexa.create_card(title="GetBroHugIntent activated", subtitle=None,
+                             content="asked alexa to give BroHug advice")
+
+    return alexa.create_response(
+        message="You must remember to maintain a safe groin distance of 1 foot " +
+                "when executing a proper bro hug.",
+        end_session=False, card_obj=card)
+
+
+@alexa.intent_handler('ServiceStatus')
+def get_service_intent_handler(request):
     """
-
-    session_attributes = {}
-    card_title = "Welcome"
-    speech_output = "Welcome to the OneSphere voice activated cloud management console. " \
-                    "Please ask me something about your OneSphere service"
-    # If the user either does not reply to the welcome message or says something
-    # that is not understood, they will be prompted again with this text.
-    reprompt_text = "Please ask me something about your OneSphere service"
-    should_end_session = False
-    return build_response(session_attributes, build_speechlet_response(
-        card_title, speech_output, reprompt_text, should_end_session))
-
-
-def handle_session_end_request():
-    card_title = "Session Ended"
-    speech_output = "Thank you for trying the OneSphere voice activated cloud management console. " \
-                    "Have a nice day! "
-    # Setting this to true ends the session and exits the skill.
-    should_end_session = True
-    return build_response({}, build_speechlet_response(
-        card_title, speech_output, None, should_end_session))
-
-
-def return_brohug_advice(intent, session):
-    """ Return sage brohug advice for the brohug novice
-    """
-
-    session_attributes = {}
-    card_title = "BrohugAdvice"
-    speech_output = "You must remember to maintain a safe groin distance of 1 foot " \
-                    "when executing a proper bro hug."
-    # If the user either does not reply to the welcome message or says something
-    # that is not understood, they will be prompted again with this text.
-    reprompt_text = "Feel free to ask me another question about OneSphere"
-    should_end_session = False
-    return build_response(session_attributes, build_speechlet_response(
-        card_title, speech_output, reprompt_text, should_end_session))
-
-
-def return_service_status(intent, session):
-    """ Queries the OneSphere status API and returns the service status.
+    Query the OneSphere status API and return the service status.
     """
 
     # Get KMS secured environment variables
-    api_base = API_BASE
-
-    card_title = intent['name']
-    session_attributes = {}
-    should_end_session = False
-    reprompt_text = ""
+    api_base = request.metadata.get('api_base', None)
 
     # Get service status
     r = safe_requests(requests.get, api_base + "/status")
@@ -150,26 +147,25 @@ def return_service_status(intent, session):
     else:
         speech_output = "The OneSphere service is currently unavailable"
 
-    return build_response(session_attributes, build_speechlet_response(
-        card_title, speech_output, reprompt_text, should_end_session))
+    card = alexa.create_card(title="GetServiceStatusIntent activated", subtitle=None,
+                             content="asked alexa to query the OneSphere service status REST API")
+
+    return alexa.create_response(speech_output,end_session=False, card_obj=card)
 
 
-def return_total_mon_spend(intent, session):
+@alexa.intent_handler('TotalMonSpend')
+def get_tot_mon_spend_handler(request):
     """ Queries the OneSphere metrics API and returns the total current month spend.
     """
 
     # Get KMS secured environment variables
-    api_base = API_BASE
-    token = TOKEN
-
-    card_title = intent['name']
-    session_attributes = {}
-    should_end_session = False
-    reprompt_text = ""
+    api_base = request.metadata.get('api_base', None)
+    token = request.metadata.get('token', None)
 
     # Get service status
+    # periodStart should default to the current month
+    # 'periodStart': '2018-01-01T00:00:00Z',
     payload = {'category': 'providers', 'name': 'cost.total',
-               'periodStart': '2018-01-01T00:00:00Z',
                'period': 'month', 'periodCount': '-1', 'view': 'full'}
     r = safe_requests(requests.get, api_base + "/metrics", params=payload,
                       headers={'accept': 'application/json',
@@ -177,129 +173,103 @@ def return_total_mon_spend(intent, session):
                                'Authorization': token}
                       )
 
-    # Check json returned
-    if 'total' in r:
-        # Iterate on number of records
-        num_records = int(r['total'])
-        total_spend = 0
-        for i in range(0, num_records):
-            member = r["members"][i]
-            value = member["values"][0]
-            val = value["value"]
-            logging.debug("value = %d", val)
-            total_spend = total_spend + val
+    # Parse metrics JSON output
+    metric_data = MetricData(r)
+    total_spend = metric_data.get_cost()
+    speech_output = "The OneSphere service spend for this month is ${:,.2f}".format(total_spend)
 
-        # Create response
-        speech_output = "The OneSphere service spend for this month is ${:,.2f}".format(total_spend)
-    else:
-        speech_output = "The OneSphere service did not respond correctly"
+    card = alexa.create_card(title="GetTotMonSpendIntent activated", subtitle=None,
+                             content="asked alexa to query the OneSphere metrics REST API and calculate"\
+                             " the total monthly spend")
 
-    return build_response(session_attributes, build_speechlet_response(
-        card_title, speech_output, reprompt_text, should_end_session))
+    return alexa.create_response(speech_output,end_session=False, card_obj=card)
 
 
-# --------------- Events ------------------
-
-
-def on_session_started(session_started_request, session):
-    """ Called when the session starts """
-
-    logging.info("on_session_started requestId=" + session_started_request['requestId']
-          + ", sessionId=" + session['sessionId'])
-
-
-def on_launch(launch_request, session):
-    """ Called when the user launches the skill without specifying what they
-    want
+@alexa.intent_handler('OnpremCurrentMonSpend')
+def get_onprem_spend_handler(request):
+    """ Queries the OneSphere metrics API and returns the total current month spend.
     """
 
-    logging.info("on_launch requestId=" + launch_request['requestId'] +
-          ", sessionId=" + session['sessionId'])
-    # Dispatch to your skill's launch
-    return get_welcome_response()
+    # Get KMS secured environment variables
+    api_base = request.metadata.get('api_base', None)
+    token = request.metadata.get('token', None)
+
+    # Get service status
+    # periodStart should default to the current month
+    # 'periodStart': '2018-01-01T00:00:00Z',
+    payload = {'category': 'providers', 'query': 'providerTypeUri EQ /rest/provider-types/ncs',
+               'name': 'cost.usage', 'period': 'month', 'periodCount': '-1', 'view': 'full'
+               }
+    params = urllib.urlencode(payload)
+    r = safe_requests(requests.get, api_base + "/metrics", params=params,
+                      headers={'accept': 'application/json;charset=UTF-8',
+                               'Authorization': token}
+                      )
+
+    # Parse metrics JSON output
+    metric_data = MetricData(r)
+    total_spend = metric_data.get_cost()
+    speech_output = "The OneSphere service private cloud spend for this month is ${:,.2f}".format(total_spend)
+
+    card = alexa.create_card(title="GetOnpremSpendIntent activated", subtitle=None,
+                             content="asked alexa to query the OneSphere metrics REST API and calculate" \
+                                     " the total private cloud monthly spend")
+
+    return alexa.create_response(speech_output,end_session=False, card_obj=card)
 
 
-def on_intent(intent_request, session):
-    """ Called when the user specifies an intent for this skill """
-
-    logging.info("on_intent requestId=" + intent_request['requestId'] +
-          ", sessionId=" + session['sessionId'])
-
-    intent = intent_request['intent']
-    intent_name = intent_request['intent']['name']
-
-    # Dispatch to your skill's intent handlers
-    if intent_name == "ServiceStatus":
-        return return_service_status(intent, session)
-    elif intent_name == "TotalMonSpend":
-        return return_total_mon_spend(intent, session)
-    elif intent_name == "BroHugDistance":
-        return return_brohug_advice(intent, session)
-    elif intent_name == "AMAZON.HelpIntent":
-        return get_welcome_response()
-    elif intent_name == "AMAZON.CancelIntent" or intent_name == "AMAZON.StopIntent":
-        return handle_session_end_request()
-    else:
-        raise ValueError("Invalid intent")
-
-
-def on_session_ended(session_ended_request, session):
-    """ Called when the user ends the session.
-
-    Is not called when the skill returns should_end_session=true
-    """
-    logging.info("on_session_ended requestId=" + session_ended_request['requestId'] +
-          ", sessionId=" + session['sessionId'])
-    # add cleanup logic here
-
-
-# --------------- Main handler ------------------
-
-def lambda_handler(event, context):
-    """ Route the incoming request based on type (LaunchRequest, IntentRequest,
-    etc.) The JSON body of the request is provided in the event parameter.
+@alexa.intent_handler('OnPremCostSavings')
+def get_onprem_cost_savings_handler(request):
+    """ Queries the OneSphere metrics API and returns the total private cloud cost savings.
+        NOT YET IMPLEMENTED
     """
 
-    logging.info("event.session.application.applicationId=" +
-          event['session']['application']['applicationId'])
+    speech_output = "The OneSphere service private cloud cost savings feature is not yet implemented"
 
-    # Validate the application ID
-    if (event['session']['application']['applicationId'] !=
-            os.environ['skill_id']):
-        raise ValueError("Invalid Application ID")
+    card = alexa.create_card(title="GetOnpremCostSavingsIntent activated", subtitle=None,
+                             content="asked alexa to query the OneSphere metrics REST API and calculate" \
+                                     " the total private cloud monthly cost savings")
 
-    # Setup global vars from lambda environment (lazy code)
-    global API_BASE
-    global USER
-    global PASSWORD
-    API_BASE = os.environ['api_base']
-    USER = os.environ['user']
-    PASSWORD = os.environ['password']
+    return alexa.create_response(speech_output,end_session=False, card_obj=card)
 
-    # Get session ID
-    global TOKEN
-    TOKEN = create_ns_session(API_BASE, USER, PASSWORD, event['session'])
-    logging.debug("create_ns_session: token = %s", TOKEN)
-    logging.debug("create_ns_session: api_base = %s", API_BASE)
 
-    # Select the appropriate event handler
-    if event['session']['new']:
-        on_session_started({'requestId': event['request']['requestId']},
-                           event['session'])
+@alexa.intent_handler('AWSNCSManagedUtil')
+def get_onprem_cost_efficiency_handler(request):
+    """ Queries the OneSphere metrics API and returns the  private cloud cost efficiency.
+    """
 
-    if event['request']['type'] == "LaunchRequest":
-        return on_launch(event['request'], event['session'])
-    elif event['request']['type'] == "IntentRequest":
-        return on_intent(event['request'], event['session'])
-    elif event['request']['type'] == "SessionEndedRequest":
-        return on_session_ended(event['request'], event['session'])
+    # Get KMS secured environment variables
+    api_base = request.metadata.get('api_base', None)
+    token = request.metadata.get('token', None)
+
+    # Get service status
+    # periodStart should default to the current month
+    # 'periodStart': '2018-01-01T00:00:00Z',
+    payload = {'category': 'providers', 'groupBy': 'providerTypeUri',
+               'name': 'cost.efficiency', 'period': 'month', 'periodCount': '-1', 'view': 'full'
+               }
+    r = safe_requests(requests.get, api_base + "/metrics", params=payload,
+                      headers={'accept': 'application/json',
+                               'Authorization': token}
+                      )
+
+    # Parse metrics JSON output
+    metric_data = MetricData(r)
+    total_spend = metric_data.get_cost()
+    speech_output = "The OneSphere service private cloud efficiency for this month is ${:,.2f}".format(total_spend)
+
+    card = alexa.create_card(title="GetOnpremCostEfficiencyIntent activated", subtitle=None,
+                             content="asked alexa to query the OneSphere metrics REST API and calculate" \
+                                     " the total private cloud monthly cost efficiency")
+
+    return alexa.create_response(speech_output,end_session=False, card_obj=card)
 
 
 if __name__ == "__main__":
 
     # open test json event
-    event = json.load(open('event.json'))
-    cred = json.load(open('cred.json'))
+    event = json.load(open('test-data/event.json'))
+    cred = json.load(open('keys/cred.json'))
 
     # set logging level
     logging.basicConfig(level=logging.INFO)
