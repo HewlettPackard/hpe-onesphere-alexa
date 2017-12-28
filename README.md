@@ -58,7 +58,9 @@ Here is a youtube video demonstrating the initial version of the code:
 Ensure that the zip file that packages this skill for lambda includes the dependent Python libraries (i.e. requests). This code was tested against Python 2.7.
 
 ## What's New
-Initial version.
+171205 - Initial version.
+<br>
+171228 - Major restructuring of the code. Leveraged Anjishnu Kumar's excellent SDK for writing Alexa skills in Python. Added several new intents.
 
 ## Contributing
 
